@@ -1,1 +1,2 @@
-Hello World!
+Flask==2.2.3
+Flask-RESTful==0.3.9
