@@ -1,10 +1,25 @@
 from flask import Flask, request
 from flask_restful import Resource, Api, reqparse, abort
+from flask_sqlalchemy import SQLAlchemy
 
+import sqlite3
 import time
 
+DATABASE = 'db.sqlite'
+
 app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DATABASE
+db = SQLAlchemy(app)
 api = Api(app)
+
+class Url_Data(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String, unique=True, nullable=False)
+    phish = db.Column(db.Boolean)
+
+    def __repr__(self) -> str:
+        return self.url
+    
 
 post_args = reqparse.RequestParser()
 post_args.add_argument("url", type=str, help='url is a required field.', required=True)
@@ -17,7 +32,17 @@ class Process(Resource):
         args = post_args.parse_args()
         ip_url = args['url']
         print(ip_url)
-        time.sleep(30)
+
+        url_exists = Url_Data.query.filter_by(url=ip_url).first()
+        # print(url_exists)
+        if url_exists:
+            pass
+        else:
+            # time.sleep(30)    --test response with different time delays
+            url_data = Url_Data(url=ip_url, phish=False)
+            db.session.add(url_data)
+            db.session.commit()
+        # return pre-set json data as example 
         return {
             "url": "https://en.wikipedia.org/wiki/Gateway",
             "length_url": 37,
@@ -114,4 +139,7 @@ class Process(Resource):
 api.add_resource(Process, '/api')
 
 if __name__ == '__main__':
-    app.run('0.0.0.0', debug=True)
+    with app.app_context():
+        db.create_all()
+    # db.create_all()
+    app.run(host='0.0.0.0', debug=True)
