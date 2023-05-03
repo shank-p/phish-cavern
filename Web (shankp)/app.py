@@ -1,9 +1,12 @@
-from flask import Flask, request
+from flask import Flask, jsonify
 from flask_restful import Resource, Api, reqparse, abort
 from flask_sqlalchemy import SQLAlchemy
 
+from feature_extractor import URL_Features
+
 import sqlite3
 import time
+import pprint
 
 DATABASE = 'db.sqlite'
 
@@ -15,7 +18,36 @@ api = Api(app)
 class Url_Data(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String, unique=True, nullable=False)
-    phish = db.Column(db.Boolean)
+    url_length = db.Column(db.Integer)
+    hostname_length = db.Column(db.Integer)
+    is_ip = db.Column(db.Integer)
+    count_dots = db.Column(db.Integer)
+    count_hyphens = db.Column(db.Integer)
+    count_at = db.Column(db.Integer)
+    count_question_mark = db.Column(db.Integer)
+    count_and = db.Column(db.Integer)
+    count_equals = db.Column(db.Integer)
+    count_underscore = db.Column(db.Integer)
+    count_percentage = db.Column(db.Integer)
+    count_slash = db.Column(db.Integer)
+    count_www = db.Column(db.Integer)
+    http_in_path = db.Column(db.Integer)
+    https_token = db.Column(db.Integer)
+    ratio_digits_url = db.Column(db.Numeric(6, 2))
+    count_subdomains = db.Column(db.Integer)
+    prefix_sufix = db.Column(db.Integer)
+    count_hyperlinks = db.Column(db.Integer)
+    ratio_int_hyperlinks = db.Column(db.Numeric(6, 2))
+    ratio_ext_hyperlinks = db.Column(db.Numeric(6, 2))
+    ext_favicon = db.Column(db.Integer)
+    links_in_tags = db.Column(db.Numeric(6, 2))
+    iframe = db.Column(db.Integer)
+    safe_anchor = db.Column(db.Numeric(6, 2))
+    whois_reg = db.Column(db.Integer)
+    domain_reg_len = db.Column(db.Integer)
+    domain_age = db.Column(db.Integer)
+    similarweb_rank = db.Column(db.Integer)
+    status = db.Column(db.String)
 
     def __repr__(self) -> str:
         return self.url
@@ -31,19 +63,20 @@ class Process(Resource):
     def post(self):
         args = post_args.parse_args()
         ip_url = args['url']
-        print(ip_url)
-
-        url_exists = Url_Data.query.filter_by(url=ip_url).first()
-        # print(url_exists)
-        if url_exists:
+        print(ip_url, sep='\n')
+        
+        op = Url_Data.query.filter_by(url=ip_url).first()
+        if op:
             pass
         else:
-            # time.sleep(30)    --test response with different time delays
-            url_data = Url_Data(url=ip_url, phish=False)
+            url_features = URL_Features(ip_url)
+            url_features.features['status'] = 'Legitimate'
+            url_data = Url_Data( **url_features.features)
             db.session.add(url_data)
             db.session.commit()
+        
         # return pre-set json data as example 
-        return {
+        op = {
             "url": "https://en.wikipedia.org/wiki/Gateway",
             "length_url": 37,
             "length_hostname": 16,
@@ -134,12 +167,14 @@ class Process(Resource):
             "page_rank": 7,
             "status": "legitimate"
         }
-        
+
+        response = jsonify(op)
+        response.status_code = 200
+        return response
 
 api.add_resource(Process, '/api')
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    # db.create_all()
     app.run(host='0.0.0.0', debug=True)
