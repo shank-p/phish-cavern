@@ -1,8 +1,12 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_restful import Resource, Api, reqparse, abort
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 
 from feature_extractor import URL_Features
+from tensorflow.keras.models import load_model
+
+import numpy as np
 
 import sqlite3
 import time
@@ -14,6 +18,7 @@ app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DATABASE
 db = SQLAlchemy(app)
 api = Api(app)
+cors = CORS(app)
 
 class Url_Data(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -47,7 +52,7 @@ class Url_Data(db.Model):
     domain_reg_len = db.Column(db.Integer)
     domain_age = db.Column(db.Integer)
     similarweb_rank = db.Column(db.Integer)
-    status = db.Column(db.String)
+    status = db.Column(db.Numeric(6, 2))
 
     def __repr__(self) -> str:
         return self.url
@@ -56,6 +61,13 @@ class Url_Data(db.Model):
 post_args = reqparse.RequestParser()
 post_args.add_argument("url", type=str, help='url is a required field.', required=True)
 
+# def predict_classes(model, x):
+#     proba = model.predict(x)
+#     if proba.shape[-1] > 1:
+#         return proba.argmax(axis=-1)
+#     else:
+#         return (proba > 0.5).astype('int32')
+
 class Process(Resource):
     def get(self):
         return {'data':'Hello World'}
@@ -63,111 +75,77 @@ class Process(Resource):
     def post(self):
         args = post_args.parse_args()
         ip_url = args['url']
-        print(ip_url, sep='\n')
+        print('-> Received URL:', ip_url)
         
         op = Url_Data.query.filter_by(url=ip_url).first()
         if op:
             pass
         else:
             url_features = URL_Features(ip_url)
-            url_features.features['status'] = 'Legitimate'
+            print(url_features.features, sep='\n')
+
+            domain_features = np.array([
+                url_features.features['url_length'],
+                url_features.features['hostname_length'],
+                url_features.features['is_ip'],
+                url_features.features['count_dots'],
+                url_features.features['count_hyphens'],
+                url_features.features['count_at'],
+                url_features.features['count_question_mark'],
+                url_features.features['count_and'],
+                url_features.features['count_equals'],
+                url_features.features['count_underscore'],
+                url_features.features['count_percentage'],
+                url_features.features['count_slash'],
+                url_features.features['count_www'],
+                url_features.features['http_in_path'],
+                url_features.features['https_token'],
+                url_features.features['ratio_digits_url'],
+                url_features.features['count_subdomains'],
+                url_features.features['prefix_sufix'],
+                url_features.features['whois_reg'],
+                url_features.features['domain_reg_len'],
+                url_features.features['domain_age']
+            ])
+
+            html_features = np.array([
+                url_features.features['count_hyperlinks'],
+                url_features.features['ratio_int_hyperlinks'],
+                url_features.features['ratio_ext_hyperlinks'],
+                url_features.features['ext_favicon'],
+                url_features.features['links_in_tags'],
+                url_features.features['iframe'],
+                url_features.features['safe_anchor']
+            ])
+
+            # print('domain', domain_features)
+            # print('html', html_features)
+
+            processed_data = [html_features, domain_features]
+            # print('processed_data',processed_data)
+            processed_data = [np.expand_dims(x, axis=0) for x in processed_data]
+            # print('expanded_data', processed_data)
+            output_prediction = model.predict(processed_data)
+            # print('output_pred:', output_prediction)
+            # output = predict_classes(model, processed_data)
+            # print('op:',output)
+
+            url_features.features['status'] = output_prediction
             url_data = Url_Data( **url_features.features)
             db.session.add(url_data)
             db.session.commit()
+
+        data = Url_Data.query.filter_by(url=ip_url).first()
+        op = {
+            'url' : data.url,
+            'url-scheme': data.https_token,
+            'domain-reg': True if data.whois_reg != 0 else False,
+            'domain-age': data.domain_age,
+            'webpage-rank': data.similarweb_rank,
+            'status': data.status
+        }
         
         # return pre-set json data as example 
-        op = {
-            "url": "https://en.wikipedia.org/wiki/Gateway",
-            "length_url": 37,
-            "length_hostname": 16,
-            "ip": 0,
-            "nb_dots": 2,
-            "nb_hyphens": 0,
-            "nb_at": 0,
-            "nb_qm": 0,
-            "nb_and": 0,
-            "nb_or": 0,
-            "nb_eq": 0,
-            "nb_underscore": 0,
-            "nb_tilde": 0,
-            "nb_percent": 0,
-            "nb_slash": 4,
-            "nb_star": 0,
-            "nb_colon": 1,
-            "nb_comma": 0,
-            "nb_semicolumn": 0,
-            "nb_dollar": 0,
-            "nb_space": 0,
-            "nb_www": 0,
-            "nb_com": 0,
-            "nb_dslash": 0,
-            "http_in_path": 0,
-            "https_token": 0,
-            "ratio_digits_url": 0,
-            "ratio_digits_host": 0,
-            "punycode": 0,
-            "port": 0,
-            "tld_in_path": 0,
-            "tld_in_subdomain": 0,
-            "abnormal_subdomain": 0,
-            "nb_subdomains": 2,
-            "prefix_suffix": 0,
-            "random_domain": 0,
-            "shortening_service": 0,
-            "path_extension": 0,
-            "nb_redirection": 0,
-            "nb_external_redirection": 0,
-            "length_words_raw": 4,
-            "char_repeat": 0,
-            "shortest_words_raw": 2,
-            "shortest_word_host": 2,
-            "shortest_word_path": 4,
-            "longest_words_raw": 9,
-            "longest_word_host": 9,
-            "longest_word_path": 7,
-            "avg_words_raw": 5.5,
-            "avg_word_host": 5.5,
-            "avg_word_path": 5.5,
-            "phish_hints": 0,
-            "domain_in_brand": 1,
-            "brand_in_subdomain": 0,
-            "brand_in_path": 0,
-            "suspecious_tld": 0,
-            "statistical_report": 0,
-            "nb_hyperlinks": 199,
-            "ratio_intHyperlinks": 0.964824121,
-            "ratio_extHyperlinks": 0.035175879,
-            "ratio_nullHyperlinks": 0,
-            "nb_extCSS": 0,
-            "ratio_intRedirection": 0,
-            "ratio_extRedirection": 0.428571429,
-            "ratio_intErrors": 0,
-            "ratio_extErrors": 0,
-            "login_form": 0,
-            "external_favicon": 0,
-            "links_in_tags": 100,
-            "submit_email": 0,
-            "ratio_intMedia": 100,
-            "ratio_extMedia": 0,
-            "sfh": 0,
-            "iframe": 0,
-            "popup_window": 0,
-            "safe_anchor": 74.07407407,
-            "onmouseover": 0,
-            "right_clic": 0,
-            "empty_title": 0,
-            "domain_in_title": 0,
-            "domain_with_copyright": 0,
-            "whois_registered_domain": 0,
-            "domain_registration_length": 902,
-            "domain_age": 7133,
-            "web_traffic": 12,
-            "dns_record": 0,
-            "google_index": 0,
-            "page_rank": 7,
-            "status": "legitimate"
-        }
-
         response = jsonify(op)
         response.status_code = 200
         return response
@@ -177,4 +155,9 @@ api.add_resource(Process, '/api')
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+    try:
+        model = load_model('ModC.h5')
+        print(" ******* Model Load Successful. ******")
+    except:
+        print('Model Load Failed!')
     app.run(host='0.0.0.0', debug=True)

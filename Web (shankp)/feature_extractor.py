@@ -50,9 +50,9 @@ class URL_Features():
 
         try:
             self.urlparse = urlparse(url)
-            print('urlparse:', self.urlparse)
+            # print('urlparse:', self.urlparse)
             self.domain = self.urlparse.netloc
-            print('domain:', self.domain)
+            # print('domain:', self.domain)
             self.scheme = self.urlparse.scheme
         except:
             pass
@@ -64,7 +64,7 @@ class URL_Features():
 
         try:
             self.tldextract = tldextract.extract(self.url)
-            print('tld_extract:', self.tldextract)
+            # print('tld_extract:', self.tldextract)
             self.root_domain = self.tldextract.domain + '.' + self.tldextract.suffix
         except:
             pass
@@ -113,7 +113,8 @@ class URL_Features():
         self.features['whois_reg'] = self.whois_registered_domain()
         self.features['domain_reg_len'] = self.domain_reg_length()
         self.features['domain_age'] = self.domain_age()
-        self.features['similarweb_rank'] = 0 #self.website_traffic()
+
+        self.features['similarweb_rank'] = self.website_rank()
 
     #Check if a given string can be a URL 
     @staticmethod
@@ -190,7 +191,7 @@ class URL_Features():
 
     # http or htpps scheme
     def url_scheme(self):
-        print('scheme:', self.scheme)
+        # print('scheme:', self.scheme)
         if self.scheme == 'https':
             return 1
         else:
@@ -202,6 +203,7 @@ class URL_Features():
             if 'https' in self.domain or 'http' in self.domain:
                 return 1
             return 0
+        return 1
     
     # Ratio of digits to URL
     def ratio_digits_url(self):
@@ -223,12 +225,16 @@ class URL_Features():
                 return 1
             else:
                 return 0
+        else:
+            return 0
 
     # Number of hyperlinks in HTML
     def hyperlinks_count(self):
         if self.soup:
             hyperlinks = self.soup.find_all('a')
             return len(hyperlinks)
+        else:
+            return -1
         
     # Ratio of internal hyperlinks
     def ratio_int_hyperlink(self):
@@ -242,6 +248,7 @@ class URL_Features():
                 else:
                     internal_hlink_count += 1
             return (internal_hlink_count/len(total_hyperlinks))
+        return 0
     
     # Ratio of external hyperlinks
     def ratio_ext_hyperlink(self):
@@ -253,6 +260,7 @@ class URL_Features():
                     if not self.root_domain in link['href']:
                         external_hlink_count += 1
             return (external_hlink_count/len(total_hyperlinks))
+        return 1
 
     # Check for external favicon
     def ext_favicon_check(self):
@@ -266,6 +274,7 @@ class URL_Features():
                         else:
                             return 1
             return 0
+        return 1
         
     # Script and link tags
     def links_in_tags(self):
@@ -289,6 +298,7 @@ class URL_Features():
                 total_objects += 1
             percentage = external_objects/total_objects * 100
             return (percentage)
+        return 0
         
     # iframe Redirection
     def iframe_redirection(self):
@@ -301,7 +311,7 @@ class URL_Features():
                     return 1
             return 0
         else:
-            return 0
+            return 1
 
     # safe anchor
     def safe_anchor(self):
@@ -329,15 +339,21 @@ class URL_Features():
     def domain_reg_length(self):
         if self.whois:
             expiration_dt = self.whois.expiration_date
+            if expiration_dt is None:
+                return 0
             if type(expiration_dt) == list:
                 expiration_dt = expiration_dt[0]
             reg_length = (expiration_dt - datetime.now()).days
             return (reg_length)
+        else:
+            return 0
 
     # Age of Domain
     def domain_age(self):
         if self.whois:
             creation_date = self.whois.creation_date
+            if creation_date is None:
+                return -1
             try:
                 if len(creation_date) > 1:
                     creation_date = creation_date[0]
@@ -349,6 +365,9 @@ class URL_Features():
         else:
             return -1
 
-    # Website Traffic
-    def website_traffic(self):
-        pass
+    # Website rank
+    def website_rank(self):
+        if self.similarweb_rank:
+            return self.similarweb_rank['similar_rank']
+        else:
+            return 0
